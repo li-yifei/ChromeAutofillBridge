@@ -14,9 +14,11 @@ Keep Google's built-in autofill and use your preferred password manager's keyboa
 ## Setup
 
 1. Install the APK from [Releases](https://github.com/li-yifei/ChromeAutofillBridge/releases/latest).
-2. Enable the module in LSPosed and select **Chrome** as its scope.
+2. Enable the module in LSPosed and select **Chrome** and/or **Vivaldi** as its scope.
 3. Select your third-party password manager as Android's preferred autofill service. Enable keyboard suggestions in that manager.
 4. In Chrome, select **Settings → Autofill services → Autofill with Google**, then restart Chrome.
+
+For Vivaldi, keep its built-in autofill selected and restart the browser. Third-party suggestions appear alongside Vivaldi’s built-in password, payment and address controls.
 
 ## Compatibility
 
@@ -25,12 +27,13 @@ Keep Google's built-in autofill and use your preferred password manager's keyboa
 | Android | 11+ required; tested on Android 17 |
 | Framework | LSPosed or another framework supporting modern Xposed API 101+ |
 | Browser | Google Chrome (`com.android.chrome`); tested on 152.0.7977.75 |
+| Vivaldi | `com.vivaldi.browser`; tested on 8.2.4147.173 with Bitwarden |
 | Password managers | Bitwarden tested; 1Password confirmed working in a work profile |
 | Keyboard | Gboard tested; inline suggestions require a compatible keyboard |
 
 Other Android Autofill providers may work; compatibility depends on their implementation. Android's selected autofill provider supplies the third-party suggestions.
 
-Currently supports top-level HTTPS forms. Nested iframes are skipped. Passkey routing is unchanged; complete passkey, card and TOTP flows need further testing. See [test results](TEST-RESULTS.md) for the scope of verification.
+Supports top-level HTTP and HTTPS forms, including LAN IPs, localhost and local hostnames. Nested iframes are skipped. Passkey routing is unchanged; complete passkey, card and TOTP flows need further testing. See [test results](TEST-RESULTS.md) for the scope of verification.
 
 ## Build
 

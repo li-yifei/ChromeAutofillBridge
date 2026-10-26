@@ -9,7 +9,6 @@ import android.graphics.Rect;
 import android.util.SparseArray;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.net.URI;
 import java.util.Map;
 import java.util.WeakHashMap;
 import android.content.Context;
@@ -25,9 +24,10 @@ import io.github.libxposed.api.XposedModule;
 public final class ModuleMain extends XposedModule {
     private static final String CHROME = "com.android.chrome";
     private static final String TAG = "ChromeAutofillBridge";
-    private boolean mainProcess;
+    private String browserPackage;
     private volatile boolean bridgeActive;
     private boolean installed;
+    private final java.util.Set<Class<?>> compatViews = new java.util.HashSet<>();
     private Method enableCompat;
     private Method isCompat;
     private final ThreadLocal<String> documentOrigin = new ThreadLocal<>();
@@ -35,14 +35,17 @@ public final class ModuleMain extends XposedModule {
     private final Map<View,String> capturedOrigins = new WeakHashMap<>();
 
     @Override public void onModuleLoaded(ModuleLoadedParam param) {
-        mainProcess = CHROME.equals(param.getProcessName());
+        String process = param.getProcessName();
+        if (CHROME.equals(process) || "com.vivaldi.browser".equals(process)) {
+            browserPackage = process;
+        }
     }
 
     // These hooks intentionally use hidden APIs exposed by the Xposed host.
     // API lookup failures are caught and reported before activating the bridge.
     @android.annotation.SuppressLint("SoonBlockedPrivateApi")
     @Override public void onPackageLoaded(PackageLoadedParam param) {
-        if (!mainProcess || installed || !CHROME.equals(param.getPackageName())) return;
+        if (browserPackage == null || installed || !browserPackage.equals(param.getPackageName())) return;
         try {
             enableCompat = AutofillManager.class.getDeclaredMethod("enableCompatibilityMode");
             isCompat = AutofillManager.class.getDeclaredMethod("isCompatibilityModeEnabledLocked");
@@ -59,7 +62,7 @@ public final class ModuleMain extends XposedModule {
             });
             installOriginHooks();
             installed = true;
-            log(Log.INFO, TAG, "API " + getApiVersion() + ": hooks installed; waiting for Chrome activity");
+            log(Log.INFO, TAG, "API " + getApiVersion() + ": hooks installed for " + browserPackage);
         } catch (Throwable error) {
             log(Log.ERROR, TAG, "Required framework hook unavailable", error);
         }
@@ -100,10 +103,8 @@ public final class ModuleMain extends XposedModule {
                     }
                 }
                 if(strings!=1 || spec==null)return null;
-                URI u=new URI(spec);
-                if(!"https".equalsIgnoreCase(u.getScheme()) || u.getHost()==null || u.getRawUserInfo()!=null)return null;
-                String current="https://"+u.getHost().toLowerCase(java.util.Locale.ROOT)
-                        +(u.getPort()==-1 || u.getPort()==443 ? "" : ":"+u.getPort());
+                String current=WebOrigin.fromUrl(spec);
+                if(current==null)return null;
                 if(agreed!=null && !agreed.equals(current))return null;
                 agreed=current; getters++;
             }
@@ -147,7 +148,11 @@ public final class ModuleMain extends XposedModule {
             return chain.proceed();
         });
         hook(AutofillManager.class.getDeclaredMethod("notifyViewEntered",View.class,int.class,Rect.class)).intercept(chain -> {
-            if(bridgeActive && origin((View)chain.getArg(0))==null)return null;
+            if(bridgeActive) {
+                View view=(View)chain.getArg(0);
+                if(origin(view)==null)return null;
+                if("com.vivaldi.browser".equals(browserPackage))installVivaldiViewBridge(view);
+            }
             return chain.proceed();
         });
         hook(View.class.getDeclaredMethod("autofill",SparseArray.class)).intercept(chain -> {
@@ -158,6 +163,33 @@ public final class ModuleMain extends XposedModule {
             }
             return chain.proceed();
         });
+    }
+
+    // Vivaldi's content view supplies its own virtual structure even in built-in
+    // autofill mode. Pair framework accessibility IDs with the framework fill path.
+    @android.annotation.SuppressLint("SoonBlockedPrivateApi")
+    private void installVivaldiViewBridge(View view) throws Exception {
+        Class<?> type=view.getClass();
+        if(compatViews.contains(type))return;
+        Method provide=type.getMethod("onProvideAutofillVirtualStructure", ViewStructure.class, int.class);
+        Method fill=type.getMethod("autofill", SparseArray.class);
+        Method compat=View.class.getDeclaredMethod("onProvideVirtualStructureCompat", ViewStructure.class, boolean.class);
+        compat.setAccessible(true);
+        Method baseFill=View.class.getDeclaredMethod("autofill", SparseArray.class);
+        if(provide.getDeclaringClass()!=View.class)hook(provide).intercept(chain -> {
+            if(!bridgeActive)return chain.proceed();
+            compat.invoke(chain.getThisObject(),chain.getArg(0),true);
+            return null;
+        });
+        if(fill.getDeclaringClass()!=View.class)hook(fill).intercept(chain -> {
+            if(!bridgeActive)return chain.proceed();
+            View target=(View)chain.getThisObject();
+            String captured=capturedOrigins.get(target);
+            if(captured==null || !captured.equals(origin(target)))return null;
+            return getInvoker(baseFill).invokeSpecial(target,chain.getArg(0));
+        });
+        compatViews.add(type);
+        log(Log.INFO,TAG,"Vivaldi content-view compatibility bridge installed");
     }
 
     // Runs inside the Xposed host with framework-provided hidden API access.
@@ -171,17 +203,17 @@ public final class ModuleMain extends XposedModule {
                 log(Log.INFO, TAG, "Select a third-party Android autofill service");
                 return;
             }
-            Uri state = Uri.parse("content://" + CHROME
+            Uri state = Uri.parse("content://" + browserPackage
                     + ".AutofillThirdPartyModeContentProvider/autofill_third_party_mode");
             try (Cursor cursor = activity.getContentResolver().query(state,
                     new String[]{"autofill_third_party_state"}, null, null, null)) {
                 if (cursor == null || !cursor.moveToFirst()) {
-                    log(Log.WARN, TAG, "Chrome mode unavailable; activation skipped");
+                    log(Log.WARN, TAG, "Browser autofill mode unavailable; activation skipped");
                     return;
                 }
                 int index = cursor.getColumnIndex("autofill_third_party_state");
                 if (index < 0 || cursor.getInt(index) != 0) {
-                    log(Log.INFO, TAG, "Select Autofill with Google in Chrome and restart Chrome");
+                    log(Log.INFO, TAG, "Select the browser's built-in autofill service and restart the browser");
                     return;
                 }
             }

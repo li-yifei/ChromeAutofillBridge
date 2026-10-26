@@ -21,8 +21,8 @@ android {
         applicationId = "io.github.li_yifei.chromeautofillbridge"
         minSdk = 30
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.4.0"
+        versionCode = 4
+        versionName = "0.5.0"
     }
     if (hasReleaseSigning) {
         signingConfigs.create("release") {
@@ -46,4 +46,5 @@ android {
 
 dependencies {
     compileOnly("io.github.libxposed:api:101.0.0")
+    testImplementation("junit:junit:4.13.2")
 }

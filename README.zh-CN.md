@@ -14,9 +14,11 @@
 ## 安装
 
 1. 从 [Releases](https://github.com/li-yifei/ChromeAutofillBridge/releases/latest) 下载并安装 APK。
-2. 在 LSPosed 中启用模块，作用域勾选 **Chrome**。
+2. 在 LSPosed 中启用模块，作用域勾选 **Chrome** 和／或 **Vivaldi**。
 3. 在 Android 设置中把第三方密码管理器设为首选自动填充服务，并开启该应用的键盘候选。
 4. Chrome → **设置 → 自动填充服务 → 使用 Google 自动填充**，重启 Chrome。
+
+Vivaldi 保持使用内置自动填充并重启浏览器。第三方候选可与 Vivaldi 自带的密码、支付方式和地址入口共存。
 
 ## 兼容性
 
@@ -25,12 +27,13 @@
 | Android | 最低 11；已测试 Android 17 |
 | 框架 | LSPosed 或支持现代 Xposed API 101+ 的框架 |
 | 浏览器 | Google Chrome（`com.android.chrome`）；已测试 152.0.7977.75 |
+| Vivaldi | `com.vivaldi.browser`；已测试 8.2.4147.173 搭配 Bitwarden |
 | 密码管理器 | Bitwarden 已测试；1Password 已在工作资料中确认可用 |
 | 键盘 | 已测试 Gboard；inline 候选需要键盘支持 |
 
 其他 Android Autofill 服务有望兼容，具体取决于各自实现。第三方候选来自 Android 当前选中的自动填充服务。
 
-当前支持 HTTPS 顶层表单，跳过嵌套 iframe。Passkey 沿用原有路由；passkey、信用卡和 TOTP 的完整流程仍待测试。验证范围见[测试记录](TEST-RESULTS.md)。
+支持 HTTP 和 HTTPS 顶层表单，包括 LAN IP、localhost 和本地域名，跳过嵌套 iframe。Passkey 沿用原有路由；passkey、信用卡和 TOTP 的完整流程仍待测试。验证范围见[测试记录](TEST-RESULTS.md)。
 
 ## 构建
 
